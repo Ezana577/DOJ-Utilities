@@ -61,13 +61,11 @@ import express from 'express';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// Simple route
 app.get('/', (req, res) => {
   res.send('DOJ Bot is running ✅');
 });
 
-// Optional status route (pretty useful)
+
 app.get('/status', (req, res) => {
   res.json({
     status: 'online',
