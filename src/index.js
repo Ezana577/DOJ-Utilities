@@ -4,6 +4,7 @@ import { readdirSync } from 'fs';
 import { pathToFileURL, fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { logger } from './utils/logger.js';
+import express from 'express';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -26,7 +27,7 @@ for (const file of commandFiles) {
     client.commands.set(command.data.name, command);
     logger.info('LOADER', `Command loaded: ${command.data.name}`);
   } else {
-    logger.warn('LOADER', `Skipped command file ${file} â missing data or execute.`);
+    logger.warn('LOADER', `Skipped command file ${file} — missing data or execute.`);
   }
 }
 
@@ -56,15 +57,9 @@ if (!process.env.DISCORD_TOKEN) {
   process.exit(1);
 }
 
-await client.login(process.env.DISCORD_TOKEN);
-import express from 'express';
 
 const app = express();
-const PORT = process.env.PORT; 
-app.listen(PORT, '0.0.0.0', () => { 
-  logger.info('WEB', `Web server running on port ${PORT}`);
-});
-
+const PORT = process.env.PORT || 3000;
 
 app.get('/status', (req, res) => {
   res.json({
@@ -75,6 +70,9 @@ app.get('/status', (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
+
+app.listen(PORT, '0.0.0.0', () => {
   logger.info('WEB', `Web server running on port ${PORT}`);
 });
+
+await client.login(process.env.DISCORD_TOKEN);
