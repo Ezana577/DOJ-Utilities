@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { Client, GatewayIntentBits, Collection } from 'discord.js';
+import { Client, GatewayIntentBits, Collection, REST, Routes } from 'discord.js';
 import { readdirSync } from 'fs';
 import { pathToFileURL, fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -18,6 +18,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
+const commandPayloads = [];
 
 const commandFiles = readdirSync(join(__dirname, 'commands')).filter(f => f.endsWith('.js'));
 for (const file of commandFiles) {
@@ -25,6 +26,7 @@ for (const file of commandFiles) {
   const command = await import(filePath);
   if (command.data && command.execute) {
     client.commands.set(command.data.name, command);
+    commandPayloads.push(command.data.toJSON());
     logger.info('LOADER', `Command loaded: ${command.data.name}`);
   } else {
     logger.warn('LOADER', `Skipped command file ${file} — missing data or execute.`);
@@ -57,6 +59,23 @@ if (!process.env.DISCORD_TOKEN) {
   process.exit(1);
 }
 
+if (!process.env.CLIENT_ID) {
+  logger.error('STARTUP', 'CLIENT_ID is not set. Exiting.');
+  process.exit(1);
+}
+
+// Register slash commands with Discord
+try {
+  const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+  logger.info('COMMANDS', `Registering ${commandPayloads.length} slash command(s)...`);
+  await rest.put(
+    Routes.applicationCommands(process.env.CLIENT_ID),
+    { body: commandPayloads }
+  );
+  logger.info('COMMANDS', 'Slash commands registered successfully.');
+} catch (err) {
+  logger.error('COMMANDS', 'Failed to register slash commands', err);
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -69,7 +88,6 @@ app.get('/status', (req, res) => {
     commands: client.commands.size,
   });
 });
-
 
 app.listen(PORT, '0.0.0.0', () => {
   logger.info('WEB', `Web server running on port ${PORT}`);
