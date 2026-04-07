@@ -60,9 +60,9 @@ await client.login(process.env.DISCORD_TOKEN);
 import express from 'express';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => {
-  res.send('DOJ Bot is running ✅');
+const PORT = process.env.PORT; 
+app.listen(PORT, '0.0.0.0', () => { 
+  logger.info('WEB', `Web server running on port ${PORT}`);
 });
 
 
