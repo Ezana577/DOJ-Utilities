@@ -18,6 +18,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
+client.prefixCommands = new Collection();
 const commandPayloads = [];
 
 const commandFiles = readdirSync(join(__dirname, 'commands')).filter(f => f.endsWith('.js'));
@@ -27,9 +28,21 @@ for (const file of commandFiles) {
   if (command.data && command.execute) {
     client.commands.set(command.data.name, command);
     commandPayloads.push(command.data.toJSON());
-    logger.info('LOADER', `Command loaded: ${command.data.name}`);
+    logger.info('LOADER', `Slash command loaded: ${command.data.name}`);
   } else {
-    logger.warn('LOADER', `Skipped command file ${file} — missing data or execute.`);
+    logger.warn('LOADER', `Skipped slash command file ${file} — missing data or execute.`);
+  }
+}
+
+const prefixCommandFiles = readdirSync(join(__dirname, 'prefixCommands')).filter(f => f.endsWith('.js'));
+for (const file of prefixCommandFiles) {
+  const filePath = pathToFileURL(join(__dirname, 'prefixCommands', file)).href;
+  const command = await import(filePath);
+  if (command.name && command.execute) {
+    client.prefixCommands.set(command.name, command);
+    logger.info('LOADER', `Prefix command loaded: ${command.name}`);
+  } else {
+    logger.warn('LOADER', `Skipped prefix command file ${file} — missing name or execute.`);
   }
 }
 
@@ -64,7 +77,6 @@ if (!process.env.CLIENT_ID) {
   process.exit(1);
 }
 
-// Register slash commands with Discord
 try {
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
   logger.info('COMMANDS', `Registering ${commandPayloads.length} slash command(s)...`);
@@ -86,6 +98,7 @@ app.get('/status', (req, res) => {
     ping: client.ws.ping,
     uptime: process.uptime(),
     commands: client.commands.size,
+    prefixCommands: client.prefixCommands.size,
   });
 });
 
