@@ -57,3 +57,26 @@ if (!process.env.DISCORD_TOKEN) {
 }
 
 await client.login(process.env.DISCORD_TOKEN);
+import express from 'express';
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Simple route
+app.get('/', (req, res) => {
+  res.send('DOJ Bot is running ✅');
+});
+
+// Optional status route (pretty useful)
+app.get('/status', (req, res) => {
+  res.json({
+    status: 'online',
+    ping: client.ws.ping,
+    uptime: process.uptime(),
+    commands: client.commands.size,
+  });
+});
+
+app.listen(PORT, () => {
+  logger.info('WEB', `Web server running on port ${PORT}`);
+});
