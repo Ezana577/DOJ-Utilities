@@ -1,4 +1,4 @@
-import { Events, ActivityType } from 'discord.js';
+import { Events, ActivityType, REST, Routes } from 'discord.js';
 import { logger } from '../utils/logger.js';
 
 export const name = Events.ClientReady;
@@ -12,4 +12,16 @@ export async function execute(client) {
     activities: [{ name: 'Department of Justice', type: ActivityType.Watching }],
     status: 'online',
   });
+
+  try {
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+    logger.info('COMMANDS', `Registering ${client.commandPayloads.length} slash command(s)...`);
+    await rest.put(
+      Routes.applicationCommands(process.env.CLIENT_ID),
+      { body: client.commandPayloads }
+    );
+    logger.info('COMMANDS', 'Slash commands registered successfully.');
+  } catch (err) {
+    logger.error('COMMANDS', 'Failed to register slash commands', err);
+  }
 }
