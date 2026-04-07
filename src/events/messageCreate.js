@@ -14,27 +14,42 @@ export async function execute(message) {
     message.content === `<@${message.client.user.id}>` ||
     message.content === `<@!${message.client.user.id}>`;
 
-  if (!isMention) return;
+  if (isMention) {
+    const userId = message.author.id;
+    const now = Date.now();
+    const lastSent = mentionCooldowns.get(userId);
 
-  const userId = message.author.id;
-  const now = Date.now();
-  const lastSent = mentionCooldowns.get(userId);
+    if (lastSent && now - lastSent < PING_COOLDOWN_MS) {
+      logger.debug('MENTION', `Cooldown active for ${message.author.tag} in guild ${message.guildId}`);
+      return;
+    }
 
-  if (lastSent && now - lastSent < PING_COOLDOWN_MS) {
-    logger.debug('MENTION', `Cooldown active for ${message.author.tag} in guild ${message.guildId}`);
+    mentionCooldowns.set(userId, now);
+    logger.info('MENTION', `Responded to mention from ${message.author.tag} in guild ${message.guildId}`);
+
+    const embed = buildEmbed({
+      title: 'Department of Justice',
+      description: `Greetings. My prefix is:\n\`\`\`\n${PREFIX}\n\`\`\`\nFor a full list of commands, use the slash command menu.`,
+      footer: 'PRPC Department of Justice',
+      timestamp: true,
+    });
+
+    await message.reply({ embeds: [embed] });
     return;
   }
 
-  mentionCooldowns.set(userId, now);
+  if (!message.content.startsWith(PREFIX)) return;
 
-  logger.info('MENTION', `Responded to mention from ${message.author.tag} in guild ${message.guildId}`);
+  const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
+  const commandName = args.shift().toLowerCase();
+  const command = message.client.prefixCommands.get(commandName);
 
-  const embed = buildEmbed({
-    title: 'Department of Justice',
-    description: `Greetings. My prefix is:\n\`\`\`\n${PREFIX}\n\`\`\`\nFor a full list of commands, use the slash command menu.`,
-    footer: 'PRPC Department of Justice',
-    timestamp: true,
-  });
+  if (!command) return;
 
-  await message.reply({ embeds: [embed] });
+  try {
+    await command.execute(message, args);
+  } catch (err) {
+    logger.error('PREFIX', `Error executing command ${commandName}`, err);
+    await message.reply({ content: 'An error occurred while executing that command.' });
+  }
 }
