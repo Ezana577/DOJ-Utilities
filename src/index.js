@@ -1,7 +1,7 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { supabase } from './database/client.js';
-import { buildEmbed } from '../utils/embedBuilder.js';
-import { logger } from '../utils/logger.js';
+import { buildEmbed } from './utils/embedBuilder.js';
+import { logger } from './utils/logger.js';
 
 const AUTHORIZED_ROLES = ['1412763165472591882', '1466940404220821504'];
 const AUTHORIZED_GUILD = '1411865120891600906';
