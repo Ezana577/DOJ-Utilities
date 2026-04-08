@@ -111,6 +111,21 @@ export async function execute(interaction) {
       logger.warn('CONVICT', '[DB] The departments table appears to be completely empty.');
     }
 
+    // 🆕 NEW: Fetch and log ALL rows in the table to be absolutely certain
+    const { data: allRows, error: allRowsError } = await supabase
+      .from('departments')
+      .select('guild_id, department_name')
+      .limit(100);
+
+    if (allRowsError) {
+      logger.error('CONVICT', '[DB] Could not fetch all rows:', allRowsError);
+    } else if (allRows?.length) {
+      logger.info('CONVICT', `[DB] All rows in departments table (${allRows.length} total):`);
+      allRows.forEach((row, i) => {
+        logger.info('CONVICT', `[DB]   ${i+1}. guild_id="${row.guild_id}" → department="${row.department_name}"`);
+      });
+    }
+
     // RLS suspicion
     logger.warn('CONVICT', '[DB] If the table contains rows but this query returned 0, it may be due to Row Level Security (RLS).');
     logger.warn('CONVICT', '[DB] Ensure you are using the Supabase service role key for internal operations that bypass RLS.');
@@ -151,7 +166,7 @@ export async function execute(interaction) {
       logger.info('CONVICT', `[MATCH] Dept "${dept.department_name}"`);
       logger.info('CONVICT', `[MATCH]   guild_id = ${dept.guild_id} vs AUTHORIZED_GUILD = ${AUTHORIZED_GUILD} (match: ${dept.guild_id === AUTHORIZED_GUILD})`);
       logger.info('CONVICT', `[MATCH]   personnel_role_id = "${deptRoleId}"`);
-      logger.info('CONVICT', `[MATCH]   User has role: ${hasMatch ? 'YES' : 'NO'}`);
+      logger.info('CONVICT', `[MATCH]   User has role: ${hasMatch ? '✅ YES' : '❌ NO'}`);
 
       if (hasMatch) matchedDepartments.push(dept);
     }
