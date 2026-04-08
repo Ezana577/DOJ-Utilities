@@ -1,5 +1,5 @@
 import { SlashCommandBuilder } from 'discord.js';
-import { supabase } from '../database/client.js';
+import { supabase } from './database/client.js';
 import { buildEmbed } from '../utils/embedBuilder.js';
 import { logger } from '../utils/logger.js';
 
