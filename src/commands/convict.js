@@ -53,13 +53,13 @@ export async function execute(interaction) {
 
   const restrictedUntil = new Date(convictionDate.getTime() + CONVICTION_DURATION_MS);
 
-  // ── DEBUG: Log environment variable presence ───────────────────────────────
-  logger.info('CONVICT', '[ENV] SUPABASE_URL present:', !!process.env.SUPABASE_URL);
-  logger.info('CONVICT', '[ENV] SUPABASE_ANON_KEY present:', !!process.env.SUPABASE_ANON_KEY);
-  logger.info('CONVICT', '[ENV] SUPABASE_SERVICE_ROLE_KEY present:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+  // ── DEBUG: Log environment variable presence (fixed formatting) ───────────
+  logger.info('CONVICT', `[ENV] SUPABASE_URL present: ${!!process.env.SUPABASE_URL}`);
+  logger.info('CONVICT', `[ENV] SUPABASE_ANON_KEY present: ${!!process.env.SUPABASE_ANON_KEY}`);
+  logger.info('CONVICT', `[ENV] SUPABASE_SERVICE_ROLE_KEY present: ${!!process.env.SUPABASE_SERVICE_ROLE_KEY}`);
 
   // ── Fetch departments ──────────────────────────────────────────────────────
-  logger.info('CONVICT', '[DB] Query: supabase.from("departments").select("*").eq("guild_id", AUTHORIZED_GUILD)');
+  logger.info('CONVICT', `[DB] Query: supabase.from("departments").select("*").eq("guild_id", "${AUTHORIZED_GUILD}")`);
   const { data: departments, error: deptError } = await supabase
     .from('departments')
     .select('*')
@@ -72,87 +72,63 @@ export async function execute(interaction) {
     });
   }
 
-  // ── DEBUG: Supabase department data ───────────────────────────────────────
+  // ── 🆕 RAW DUMP: Log exactly what Supabase returned (all columns) ───────────
   logger.info('CONVICT', '─────────────────────────────────────────');
-  logger.info('CONVICT', `[DB] Departments fetched with guild filter: ${departments?.length ?? 0}`);
-
-  if (departments?.length) {
-    departments.forEach((dept, i) => {
-      logger.info('CONVICT', `[DB] Dept #${i + 1}: name="${dept.department_name}" | personnel_role_id=${dept.personnel_role_id} (type: ${typeof dept.personnel_role_id}) | convicted_role_id=${dept.convicted_role_id} | guild_id=${dept.guild_id} (type: ${typeof dept.guild_id})`);
+  logger.info('CONVICT', `[DB] Raw departments data returned by query (length: ${departments?.length ?? 0}):`);
+  if (departments && departments.length > 0) {
+    departments.forEach((dept, index) => {
+      logger.info('CONVICT', `[DB] Row ${index + 1}: ${JSON.stringify(dept)}`);
     });
   } else {
-    logger.warn('CONVICT', '[DB] No departments returned with guild filter. Running diagnostic queries...');
-
-    // Check total rows in table (count only, no data)
-    const { count: totalCount, error: countError } = await supabase
-      .from('departments')
-      .select('*', { count: 'exact', head: true });
-
-    if (countError) {
-      logger.error('CONVICT', '[DB] Could not count departments table:', countError);
-    } else {
-      logger.info('CONVICT', `[DB] Total rows in departments table (unfiltered): ${totalCount}`);
-    }
-
-    // Fetch first 5 rows (if any) to inspect guild_id values
-    const { data: sampleRows, error: sampleError } = await supabase
-      .from('departments')
-      .select('guild_id, department_name, personnel_role_id')
-      .limit(5);
-
-    if (sampleError) {
-      logger.error('CONVICT', '[DB] Could not fetch sample rows:', sampleError);
-    } else if (sampleRows?.length) {
-      logger.info('CONVICT', '[DB] Sample rows from departments table (guild_id values):');
-      sampleRows.forEach((row, i) => {
-        logger.info('CONVICT', `[DB]   ${i+1}. guild_id="${row.guild_id}" (type: ${typeof row.guild_id}) | dept="${row.department_name}"`);
-      });
-    } else {
-      logger.warn('CONVICT', '[DB] The departments table appears to be completely empty.');
-    }
-
-    // 🆕 NEW: Fetch and log ALL rows in the table to be absolutely certain
-    const { data: allRows, error: allRowsError } = await supabase
-      .from('departments')
-      .select('guild_id, department_name')
-      .limit(100);
-
-    if (allRowsError) {
-      logger.error('CONVICT', '[DB] Could not fetch all rows:', allRowsError);
-    } else if (allRows?.length) {
-      logger.info('CONVICT', `[DB] All rows in departments table (${allRows.length} total):`);
-      allRows.forEach((row, i) => {
-        logger.info('CONVICT', `[DB]   ${i+1}. guild_id="${row.guild_id}" → department="${row.department_name}"`);
-      });
-    }
-
-    // RLS suspicion
-    logger.warn('CONVICT', '[DB] If the table contains rows but this query returned 0, it may be due to Row Level Security (RLS).');
-    logger.warn('CONVICT', '[DB] Ensure you are using the Supabase service role key for internal operations that bypass RLS.');
-    logger.warn('CONVICT', `[DB] AUTHORIZED_GUILD value used in query: "${AUTHORIZED_GUILD}" (type: string)`);
+    logger.warn('CONVICT', '[DB] Query returned an empty array.');
   }
 
-  // ── Fetch target member ────────────────────────────────────────────────────
+  // Additional diagnostic: fetch all departments (no filter) to see what's in the table
+  const { data: allDepts, error: allDeptsError } = await supabase
+    .from('departments')
+    .select('*')
+    .limit(100);
+
+  if (allDeptsError) {
+    logger.error('CONVICT', '[DB] Failed to fetch all departments:', allDeptsError);
+  } else {
+    logger.info('CONVICT', `[DB] Total rows in departments table (unfiltered): ${allDepts?.length ?? 0}`);
+    if (allDepts && allDepts.length > 0) {
+      logger.info('CONVICT', '[DB] All rows in table (guild_id + department_name only):');
+      allDepts.forEach((row, i) => {
+        logger.info('CONVICT', `[DB]   ${i+1}. guild_id="${row.guild_id}" (type: ${typeof row.guild_id}) → dept="${row.department_name}"`);
+      });
+    }
+  }
+
+  // ── 🆕 Type & value comparison for guild_id ─────────────────────────────────
+  logger.info('CONVICT', '─────────────────────────────────────────');
+  logger.info('CONVICT', `[GUILD CHECK] AUTHORIZED_GUILD value: "${AUTHORIZED_GUILD}" (type: ${typeof AUTHORIZED_GUILD})`);
+  logger.info('CONVICT', `[GUILD CHECK] interaction.guildId value: "${interaction.guildId}" (type: ${typeof interaction.guildId})`);
+  logger.info('CONVICT', `[GUILD CHECK] Do they match? ${interaction.guildId === AUTHORIZED_GUILD}`);
+
+  // ── Fetch target member (with explicit confirmation) ───────────────────────
   let targetMember = null;
   try {
     targetMember = await interaction.guild.members.fetch(targetUser.id);
-  } catch {
-    logger.warn('CONVICT', `[MEMBER] User ${targetUser.id} (${targetUser.tag}) could not be fetched — they may not be in the server.`);
+    logger.info('CONVICT', `[MEMBER] Successfully fetched target member: ${targetUser.tag} (${targetUser.id})`);
+  } catch (err) {
+    logger.warn('CONVICT', `[MEMBER] Failed to fetch target member ${targetUser.id} (${targetUser.tag}): ${err.message}`);
+    logger.warn('CONVICT', '[MEMBER] This user may not be in the guild or the bot lacks permissions.');
   }
 
   // ── DEBUG: Discord member role data ───────────────────────────────────────
   if (targetMember) {
     const roleIds = targetMember.roles.cache.map(r => r.id);
     const roleNames = targetMember.roles.cache.map(r => `${r.name}(${r.id})`).join(', ');
-    logger.info('CONVICT', `[MEMBER] Target: ${targetUser.tag} (${targetUser.id})`);
-    logger.info('CONVICT', `[MEMBER] Total roles: ${roleIds.length}`);
+    logger.info('CONVICT', `[MEMBER] Target roles count: ${roleIds.length}`);
     logger.info('CONVICT', `[MEMBER] Role IDs (array): [${roleIds.join(', ')}]`);
     logger.info('CONVICT', `[MEMBER] Roles (name + id): ${roleNames}`);
   } else {
-    logger.warn('CONVICT', `[MEMBER] Cannot match departments — target member is not in the guild.`);
+    logger.warn('CONVICT', `[MEMBER] Cannot match departments — target member is not in the guild or fetch failed.`);
   }
 
-  // ── DEBUG: Side-by-side match comparison ──────────────────────────────────
+  // ── 🆕 Verbose matching with explicit string trimming and type coercion ────
   logger.info('CONVICT', '─────────────────────────────────────────');
   logger.info('CONVICT', '[MATCH] Beginning department role match check...');
 
@@ -160,35 +136,52 @@ export async function execute(interaction) {
 
   if (targetMember && departments?.length) {
     for (const dept of departments) {
+      const deptGuildId = String(dept.guild_id).trim();
       const deptRoleId = String(dept.personnel_role_id).trim();
-      const hasMatch = targetMember.roles.cache.has(deptRoleId);
 
-      logger.info('CONVICT', `[MATCH] Dept "${dept.department_name}"`);
-      logger.info('CONVICT', `[MATCH]   guild_id = ${dept.guild_id} vs AUTHORIZED_GUILD = ${AUTHORIZED_GUILD} (match: ${dept.guild_id === AUTHORIZED_GUILD})`);
-      logger.info('CONVICT', `[MATCH]   personnel_role_id = "${deptRoleId}"`);
-      logger.info('CONVICT', `[MATCH]   User has role: ${hasMatch ? '✅ YES' : '❌ NO'}`);
+      // Check guild match
+      const guildMatch = deptGuildId === AUTHORIZED_GUILD;
+      logger.info('CONVICT', `[MATCH] Department "${dept.department_name}" (ID: ${dept.id || 'N/A'})`);
+      logger.info('CONVICT', `[MATCH]   guild_id from DB: "${deptGuildId}" (type: ${typeof dept.guild_id})`);
+      logger.info('CONVICT', `[MATCH]   AUTHORIZED_GUILD:  "${AUTHORIZED_GUILD}" (type: string)`);
+      logger.info('CONVICT', `[MATCH]   Guild match? ${guildMatch ? '✅ YES' : '❌ NO'}`);
 
-      if (hasMatch) matchedDepartments.push(dept);
+      // Check role match
+      const userHasRole = targetMember.roles.cache.has(deptRoleId);
+      logger.info('CONVICT', `[MATCH]   personnel_role_id from DB: "${deptRoleId}"`);
+      logger.info('CONVICT', `[MATCH]   User has this role? ${userHasRole ? '✅ YES' : '❌ NO'}`);
+
+      // Additional debug: list all user role IDs for direct visual comparison
+      if (!userHasRole) {
+        const userRoleIds = targetMember.roles.cache.map(r => r.id);
+        logger.info('CONVICT', `[MATCH]   User's role IDs: [${userRoleIds.join(', ')}]`);
+      }
+
+      if (guildMatch && userHasRole) {
+        matchedDepartments.push(dept);
+        logger.info('CONVICT', `[MATCH]   ✅ Department MATCHED and added.`);
+      } else {
+        logger.info('CONVICT', `[MATCH]   ❌ Department NOT matched.`);
+      }
+      logger.info('CONVICT', '---');
     }
   } else {
-    logger.warn('CONVICT', '[MATCH] Skipped — either no member or no departments available.');
+    if (!targetMember) logger.warn('CONVICT', '[MATCH] Skipped — target member not fetched.');
+    if (!departments?.length) logger.warn('CONVICT', '[MATCH] Skipped — no departments returned from query.');
   }
 
-  logger.info('CONVICT', `[MATCH] Matched departments: ${matchedDepartments.length > 0 ? matchedDepartments.map(d => d.department_name).join(', ') : 'None'}`);
+  logger.info('CONVICT', `[MATCH] Final matched departments: ${matchedDepartments.length > 0 ? matchedDepartments.map(d => d.department_name).join(', ') : 'None'}`);
   logger.info('CONVICT', '─────────────────────────────────────────');
 
   const logChannel = await interaction.guild.channels.fetch(CONVICTION_LOG_CHANNEL).catch(() => null);
 
   // ── No department matched ──────────────────────────────────────────────────
   if (!matchedDepartments.length) {
-    logger.warn('CONVICT', '[FALLBACK] No department matched — check guild ID and role IDs exactly.');
-    logger.warn('CONVICT', '[FALLBACK] Listing all departments in Supabase for comparison:');
-    if (departments?.length) {
-      departments.forEach(d => logger.warn('CONVICT', `[FALLBACK]   ${d.department_name}: guild_id=${d.guild_id}, role_id=${d.personnel_role_id}`));
-    } else {
-      logger.warn('CONVICT', '[FALLBACK]   (No departments returned from query)');
-    }
-    logger.warn('CONVICT', '[FALLBACK] If role IDs or guild IDs do not match exactly, this will fail.');
+    logger.warn('CONVICT', '[FALLBACK] No department matched. Possible reasons:');
+    logger.warn('CONVICT', '[FALLBACK]   - Target member lacks any personnel_role_id listed in departments.');
+    logger.warn('CONVICT', '[FALLBACK]   - Guild ID mismatch (should not happen due to earlier check).');
+    logger.warn('CONVICT', '[FALLBACK]   - RLS blocking query (check service role key).');
+    logger.warn('CONVICT', '[FALLBACK]   - Departments table empty for this guild.');
 
     const convictionPayload = {
       user_id: targetUser.id,
@@ -197,7 +190,7 @@ export async function execute(interaction) {
       department: 'None',
       restricted_until: restrictedUntil.toISOString(),
     };
-    logger.info('CONVICT', `[INSERT] Preparing to insert conviction with no department:`, convictionPayload);
+    logger.info('CONVICT', `[INSERT] Payload for no-department conviction:`, convictionPayload);
 
     const { error: insertError } = await supabase.from('convictions').insert(convictionPayload);
 
@@ -234,7 +227,7 @@ export async function execute(interaction) {
       department: dept.department_name,
       restricted_until: restrictedUntil.toISOString(),
     };
-    logger.info('CONVICT', `[INSERT] Preparing to insert conviction for department "${dept.department_name}":`, convictionPayload);
+    logger.info('CONVICT', `[INSERT] Payload for department "${dept.department_name}":`, convictionPayload);
 
     const { error: insertError } = await supabase.from('convictions').insert(convictionPayload);
 
