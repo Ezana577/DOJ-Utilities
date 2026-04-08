@@ -28,12 +28,22 @@ export async function execute(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
   if (interaction.guildId !== AUTHORIZED_GUILD) {
-    return interaction.editReply({ content: 'This command is not authorized for use in this server.' });
+    return interaction.editReply({
+      embeds: [buildStatusEmbed(
+        'Unauthorized Server',
+        'This command is not authorized for use in this server.'
+      )],
+    });
   }
 
   const hasRole = interaction.member.roles.cache.some(r => AUTHORIZED_ROLES.includes(r.id));
   if (!hasRole) {
-    return interaction.editReply({ content: 'You do not have the required permissions to use this command.' });
+    return interaction.editReply({
+      embeds: [buildStatusEmbed(
+        'Access Denied',
+        'You do not have the required permissions to use this command.'
+      )],
+    });
   }
 
   const targetUser = interaction.options.getUser('user');
@@ -42,7 +52,12 @@ export async function execute(interaction) {
 
   const convictionDate = new Date(date);
   if (isNaN(convictionDate.getTime())) {
-    return interaction.editReply({ content: 'Invalid date format. Please use YYYY-MM-DD.' });
+    return interaction.editReply({
+      embeds: [buildStatusEmbed(
+        'Invalid Date',
+        'The date provided is not valid. Please use the format `YYYY-MM-DD`.'
+      )],
+    });
   }
 
   const restrictedUntil = new Date(convictionDate.getTime() + CONVICTION_DURATION_MS);
@@ -54,7 +69,12 @@ export async function execute(interaction) {
 
   if (deptError) {
     logger.error('CONVICT', 'Failed to fetch departments from Supabase', deptError);
-    return interaction.editReply({ content: 'Failed to retrieve department data. Please try again later.' });
+    return interaction.editReply({
+      embeds: [buildStatusEmbed(
+        '⚠️ Database Error',
+        'Failed to retrieve department data. Please try again later.'
+      )],
+    });
   }
 
   let targetMember = null;
@@ -64,17 +84,16 @@ export async function execute(interaction) {
     logger.warn('CONVICT', `User ${targetUser.id} is not in the server.`);
   }
 
-  // DEBUG: Log roles for matching diagnosis
   if (targetMember) {
     logger.info('CONVICT', `User roles: ${targetMember.roles.cache.map(r => r.id).join(', ')}`);
   } else {
-    logger.info('CONVICT', `Target member not found in guild — skipping role match.`);
+    logger.warn('CONVICT', `User ${targetUser.id} is not in the server — role match skipped.`);
   }
 
   if (departments?.length) {
     logger.info('CONVICT', `Department personnel_role_ids: ${departments.map(d => d.personnel_role_id).join(', ')}`);
   } else {
-    logger.info('CONVICT', `No departments found in Supabase for guild ${AUTHORIZED_GUILD}.`);
+    logger.warn('CONVICT', `No departments found in Supabase for guild ${AUTHORIZED_GUILD}.`);
   }
 
   const matchedDepartments = targetMember && departments?.length
@@ -105,10 +124,13 @@ export async function execute(interaction) {
       }).catch(err => logger.error('CONVICT', 'Failed to send to conviction log channel', err));
     }
 
-    logger.info('CONVICT', `${targetUser.tag} convicted with no department by ${interaction.user.tag} | Charge: ${charge}`);
+    logger.info('CONVICT', `${targetUser.tag} convicted (no department) by ${interaction.user.tag} | Charge: ${charge}`);
 
     return interaction.editReply({
-      content: `Conviction logged for ${targetUser.tag}. No department role applied — user is not a member of any registered department.`,
+      embeds: [buildStatusEmbed(
+        'Conviction Recorded',
+        `The conviction for <@${targetUser.id}> has been logged successfully.\n\n**Charge:** ${charge}\n**Restriction Period:** ${convictionDate.toDateString()} — ${restrictedUntil.toDateString()}\n\nNo department affiliation was found for this user. The record has been filed without departmental restrictions.`
+      )],
     });
   }
 
@@ -157,7 +179,19 @@ export async function execute(interaction) {
   logger.info('CONVICT', `${targetUser.tag} convicted by ${interaction.user.tag} | Charge: ${charge}`);
 
   return interaction.editReply({
-    content: `Conviction processed for ${targetUser.tag}. Restrictions applied until ${restrictedUntil.toDateString()}.`,
+    embeds: [buildStatusEmbed(
+      '⚖️ Conviction Processed',
+      `The conviction for <@${targetUser.id}> has been successfully processed.\n\n**Charge:** ${charge}\n**Restriction Period:** ${convictionDate.toDateString()} — ${restrictedUntil.toDateString()}\n**Departments Affected:** ${matchedDepartments.map(d => d.department_name).join(', ')}`
+    )],
+  });
+}
+
+function buildStatusEmbed(title, description) {
+  return buildEmbed({
+    title,
+    description,
+    footer: 'PRPC Department of Justice',
+    timestamp: true,
   });
 }
 
@@ -165,7 +199,7 @@ function buildConvictionEmbed(user, executor, department, charge, convictionDate
   return buildEmbed({
     title: 'Conviction Notice',
     fields: [
-      { name: 'User', value: `${user.tag} (${user.id})`, inline: true },
+      { name: 'Convicted User', value: `<@${user.id}> (${user.tag})`, inline: true },
       { name: 'Department', value: department, inline: true },
       { name: 'Charge', value: charge },
       { name: 'Conviction Date', value: convictionDate.toDateString(), inline: true },
@@ -187,7 +221,7 @@ export function scheduleRoleRemoval(guild, userId, dept, restrictedUntil) {
       await member.roles.remove(String(dept.convicted_role_id));
       logger.info('CONVICT', `Removed convicted role in ${dept.department_name} from ${userId}`);
     } catch {
-      logger.warn('CONVICT', `Could not remove convicted role from ${userId} in ${dept.department_name} — may have left the server.`);
+      logger.warn('CONVICT', `Could not remove convicted role from ${userId} in ${dept.department_name} — user may have left the server.`);
     }
   }, delay);
 }
