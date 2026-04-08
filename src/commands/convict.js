@@ -64,8 +64,21 @@ export async function execute(interaction) {
     logger.warn('CONVICT', `User ${targetUser.id} is not in the server.`);
   }
 
+  // DEBUG: Log roles for matching diagnosis
+  if (targetMember) {
+    logger.info('CONVICT', `User roles: ${targetMember.roles.cache.map(r => r.id).join(', ')}`);
+  } else {
+    logger.info('CONVICT', `Target member not found in guild — skipping role match.`);
+  }
+
+  if (departments?.length) {
+    logger.info('CONVICT', `Department personnel_role_ids: ${departments.map(d => d.personnel_role_id).join(', ')}`);
+  } else {
+    logger.info('CONVICT', `No departments found in Supabase for guild ${AUTHORIZED_GUILD}.`);
+  }
+
   const matchedDepartments = targetMember && departments?.length
-    ? departments.filter(dept => targetMember.roles.cache.has(dept.personnel_role_id))
+    ? departments.filter(dept => targetMember.roles.cache.has(String(dept.personnel_role_id)))
     : [];
 
   const logChannel = await interaction.guild.channels.fetch(CONVICTION_LOG_CHANNEL).catch(() => null);
@@ -83,12 +96,13 @@ export async function execute(interaction) {
       logger.error('CONVICT', 'Failed to log conviction with no department', insertError);
     }
 
-    const embed = buildConvictionEmbed(targetUser, 'None', charge, convictionDate, restrictedUntil);
+    const embed = buildConvictionEmbed(targetUser, interaction.user, 'None', charge, convictionDate, restrictedUntil);
 
     if (logChannel) {
-      await logChannel.send({ embeds: [embed] }).catch(err =>
-        logger.error('CONVICT', 'Failed to send to conviction log channel', err)
-      );
+      await logChannel.send({
+        content: `<@${targetUser.id}>`,
+        embeds: [embed],
+      }).catch(err => logger.error('CONVICT', 'Failed to send to conviction log channel', err));
     }
 
     logger.info('CONVICT', `${targetUser.tag} convicted with no department by ${interaction.user.tag} | Charge: ${charge}`);
@@ -113,26 +127,28 @@ export async function execute(interaction) {
 
     if (targetMember) {
       try {
-        await targetMember.roles.add(dept.convicted_role_id);
+        await targetMember.roles.add(String(dept.convicted_role_id));
         logger.info('CONVICT', `Assigned convicted role in ${dept.department_name} to ${targetUser.id}`);
       } catch (err) {
         logger.error('CONVICT', `Failed to assign convicted role in ${dept.department_name}`, err);
       }
     }
 
-    const embed = buildConvictionEmbed(targetUser, dept.department_name, charge, convictionDate, restrictedUntil);
+    const embed = buildConvictionEmbed(targetUser, interaction.user, dept.department_name, charge, convictionDate, restrictedUntil);
 
     if (logChannel) {
-      await logChannel.send({ embeds: [embed] }).catch(err =>
-        logger.error('CONVICT', 'Failed to send to conviction log channel', err)
-      );
+      await logChannel.send({
+        content: `<@${targetUser.id}>`,
+        embeds: [embed],
+      }).catch(err => logger.error('CONVICT', 'Failed to send to conviction log channel', err));
     }
 
-    const staffChannel = await interaction.guild.channels.fetch(dept.staff_channel_id).catch(() => null);
+    const staffChannel = await interaction.guild.channels.fetch(String(dept.staff_channel_id)).catch(() => null);
     if (staffChannel) {
-      await staffChannel.send({ embeds: [embed] }).catch(err =>
-        logger.error('CONVICT', `Failed to send to staff channel for ${dept.department_name}`, err)
-      );
+      await staffChannel.send({
+        content: `<@${targetUser.id}>`,
+        embeds: [embed],
+      }).catch(err => logger.error('CONVICT', `Failed to send to staff channel for ${dept.department_name}`, err));
     }
 
     scheduleRoleRemoval(interaction.guild, targetUser.id, dept, restrictedUntil);
@@ -145,7 +161,7 @@ export async function execute(interaction) {
   });
 }
 
-function buildConvictionEmbed(user, department, charge, convictionDate, restrictedUntil) {
+function buildConvictionEmbed(user, executor, department, charge, convictionDate, restrictedUntil) {
   return buildEmbed({
     title: 'Conviction Notice',
     fields: [
@@ -154,6 +170,7 @@ function buildConvictionEmbed(user, department, charge, convictionDate, restrict
       { name: 'Charge', value: charge },
       { name: 'Conviction Date', value: convictionDate.toDateString(), inline: true },
       { name: 'Restricted Until', value: restrictedUntil.toDateString(), inline: true },
+      { name: 'Conviction Logged By', value: `<@${executor.id}>`, inline: true },
     ],
     footer: 'PRPC Department of Justice',
     timestamp: true,
@@ -167,7 +184,7 @@ export function scheduleRoleRemoval(guild, userId, dept, restrictedUntil) {
   setTimeout(async () => {
     try {
       const member = await guild.members.fetch(userId);
-      await member.roles.remove(dept.convicted_role_id);
+      await member.roles.remove(String(dept.convicted_role_id));
       logger.info('CONVICT', `Removed convicted role in ${dept.department_name} from ${userId}`);
     } catch {
       logger.warn('CONVICT', `Could not remove convicted role from ${userId} in ${dept.department_name} — may have left the server.`);
