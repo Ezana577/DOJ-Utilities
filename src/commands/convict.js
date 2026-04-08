@@ -25,19 +25,28 @@ export const data = new SlashCommandBuilder()
       .setRequired(true));
 
 export async function execute(interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  // ── Safe deferral with error handling ────────────────────────────────────
+  try {
+    // Use direct ephemeral option (preferred in newer Discord.js)
+    await interaction.deferReply({ ephemeral: true });
+  } catch (err) {
+    logger.error('CONVICT', 'Failed to defer interaction reply (interaction may have expired):', err);
+    // Cannot send any response, so we just exit silently
+    return;
+  }
 
+  // ── Permission & validation checks ───────────────────────────────────────
   if (interaction.guildId !== AUTHORIZED_GUILD) {
     return interaction.editReply({
       embeds: [buildStatusEmbed('Unauthorized Server', 'This command is not authorized for use in this server.')],
-    });
+    }).catch(() => {});
   }
 
   const hasRole = interaction.member.roles.cache.some(r => AUTHORIZED_ROLES.includes(r.id));
   if (!hasRole) {
     return interaction.editReply({
       embeds: [buildStatusEmbed('Access Denied', 'You do not have the required permissions to use this command.')],
-    });
+    }).catch(() => {});
   }
 
   const targetUser = interaction.options.getUser('user');
@@ -48,12 +57,12 @@ export async function execute(interaction) {
   if (isNaN(convictionDate.getTime())) {
     return interaction.editReply({
       embeds: [buildStatusEmbed('Invalid Date', 'The date provided is not valid. Please use the format `YYYY-MM-DD`.')],
-    });
+    }).catch(() => {});
   }
 
   const restrictedUntil = new Date(convictionDate.getTime() + CONVICTION_DURATION_MS);
 
-  // ── DEBUG: Log environment variable presence (fixed formatting) ───────────
+  // ── DEBUG: Environment variable presence ─────────────────────────────────
   logger.info('CONVICT', `[ENV] SUPABASE_URL present: ${!!process.env.SUPABASE_URL}`);
   logger.info('CONVICT', `[ENV] SUPABASE_ANON_KEY present: ${!!process.env.SUPABASE_ANON_KEY}`);
   logger.info('CONVICT', `[ENV] SUPABASE_SERVICE_ROLE_KEY present: ${!!process.env.SUPABASE_SERVICE_ROLE_KEY}`);
@@ -69,10 +78,10 @@ export async function execute(interaction) {
     logger.error('CONVICT', 'Failed to fetch departments from Supabase', deptError);
     return interaction.editReply({
       embeds: [buildStatusEmbed('Database Error', 'Failed to retrieve department data. Please try again later.')],
-    });
+    }).catch(() => {});
   }
 
-  // ── 🆕 RAW DUMP: Log exactly what Supabase returned (all columns) ───────────
+  // ── RAW DUMP: Log exactly what Supabase returned ───────────────────────────
   logger.info('CONVICT', '─────────────────────────────────────────');
   logger.info('CONVICT', `[DB] Raw departments data returned by query (length: ${departments?.length ?? 0}):`);
   if (departments && departments.length > 0) {
@@ -83,7 +92,7 @@ export async function execute(interaction) {
     logger.warn('CONVICT', '[DB] Query returned an empty array.');
   }
 
-  // Additional diagnostic: fetch all departments (no filter) to see what's in the table
+  // Diagnostic: fetch all departments (no filter) to see what's in the table
   const { data: allDepts, error: allDeptsError } = await supabase
     .from('departments')
     .select('*')
@@ -101,7 +110,7 @@ export async function execute(interaction) {
     }
   }
 
-  // ── 🆕 Type & value comparison for guild_id ─────────────────────────────────
+  // ── Type & value comparison for guild_id ─────────────────────────────────
   logger.info('CONVICT', '─────────────────────────────────────────');
   logger.info('CONVICT', `[GUILD CHECK] AUTHORIZED_GUILD value: "${AUTHORIZED_GUILD}" (type: ${typeof AUTHORIZED_GUILD})`);
   logger.info('CONVICT', `[GUILD CHECK] interaction.guildId value: "${interaction.guildId}" (type: ${typeof interaction.guildId})`);
@@ -128,7 +137,7 @@ export async function execute(interaction) {
     logger.warn('CONVICT', `[MEMBER] Cannot match departments — target member is not in the guild or fetch failed.`);
   }
 
-  // ── 🆕 Verbose matching with explicit string trimming and type coercion ────
+  // ── Verbose matching with explicit string trimming and type coercion ────
   logger.info('CONVICT', '─────────────────────────────────────────');
   logger.info('CONVICT', '[MATCH] Beginning department role match check...');
 
@@ -215,7 +224,7 @@ export async function execute(interaction) {
         'Conviction Recorded',
         `The conviction for <@${targetUser.id}> has been successfully logged.\n\n**Charge:** ${charge}\n**Restriction Period:** ${convictionDate.toDateString()} — ${restrictedUntil.toDateString()}\n\nNo active department affiliation was found for this user. The record has been filed without departmental restrictions.`
       )],
-    });
+    }).catch(() => {});
   }
 
   // ── Matched departments ────────────────────────────────────────────────────
@@ -270,7 +279,7 @@ export async function execute(interaction) {
       'Conviction Processed',
       `The conviction for <@${targetUser.id}> has been successfully processed.\n\n**Charge:** ${charge}\n**Restriction Period:** ${convictionDate.toDateString()} — ${restrictedUntil.toDateString()}\n**Departments Affected:** ${matchedDepartments.map(d => d.department_name).join(', ')}`
     )],
-  });
+  }).catch(() => {});
 }
 
 function buildStatusEmbed(title, description) {
