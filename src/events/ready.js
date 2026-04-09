@@ -14,18 +14,8 @@ export async function execute(client) {
     status: 'online',
   });
 
-  const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-
   try {
-    // Wipe all previous commands (this removes duplicates)
-    logger.info('COMMANDS', 'Wiping all existing slash commands...');
-    await rest.put(
-      Routes.applicationCommands(process.env.CLIENT_ID),
-      { body: [] } // clear everything
-    );
-    logger.info('COMMANDS', 'All old commands cleared!');
-
-    // Register current commands
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     logger.info('COMMANDS', `Registering ${client.commandPayloads.length} slash command(s)...`);
     await rest.put(
       Routes.applicationCommands(process.env.CLIENT_ID),
@@ -33,7 +23,7 @@ export async function execute(client) {
     );
     logger.info('COMMANDS', 'Slash commands registered successfully.');
   } catch (err) {
-    logger.error('COMMANDS', 'Failed to clear/register slash commands', err);
+    logger.error('COMMANDS', 'Failed to register slash commands', err);
   }
 
   startSyncInterval(client);
