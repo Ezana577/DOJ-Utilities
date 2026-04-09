@@ -5,9 +5,9 @@ import { supabase } from '../database/client.js';
 const DOJ_GUILD_ID = '1411865120891600906';
 const SYNC_LOG_CHANNEL = '1491642155234496592';
 
-const OWNER_ID = '816820037527797780';
+export const OWNER_ID = '816820037527797780';
 
-const DEPARTMENT_MAP = [
+export const DEPARTMENT_MAP = [
   { name: 'S.W.A.T', dojRoleId: '1466924789191938089' },
   { name: 'FBI',     dojRoleId: '1460762360657740053' },
   { name: 'C.A.T',   dojRoleId: '1481297780541624340' },
@@ -15,8 +15,6 @@ const DEPARTMENT_MAP = [
   { name: 'USAR',    dojRoleId: '1491641233494380654' },
   { name: 'USSS',    dojRoleId: '1490450626809823480' },
 ];
-
-export { OWNER_ID, DEPARTMENT_MAP };
 
 let syncInterval = null;
 let isSyncing = false;
