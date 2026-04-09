@@ -2,7 +2,6 @@ import { Events } from 'discord.js';
 import { buildEmbed } from '../utils/embedBuilder.js';
 import { PREFIX, PING_COOLDOWN_MS } from '../../config/constants.js';
 import { logger } from '../utils/logger.js';
-import { runRolesync, resetSyncInterval, OWNER_ID } from '../utils/rolesync.js';
 
 const mentionCooldowns = new Map();
 
@@ -43,33 +42,6 @@ export async function execute(message) {
 
   const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
   const commandName = args.shift().toLowerCase();
-
-  if (commandName === 'rolesync') {
-    if (message.author.id !== OWNER_ID) {
-      return message.reply({
-        embeds: [buildEmbed({
-          title: 'Access Denied',
-          description: 'You do not have the proper permission to run this command.',
-          footer: 'PRPC Department of Justice',
-          timestamp: true,
-        })],
-      }).catch(() => {});
-    }
-
-    await message.reply({
-      embeds: [buildEmbed({
-        title: 'Rolesync Initiated',
-        description: 'Manual sync has been triggered. Check the sync log channel for live updates.',
-        footer: 'PRPC Department of Justice',
-        timestamp: true,
-      })],
-    }).catch(() => {});
-
-    logger.info('ROLESYNC', `Manual sync triggered via prefix by ${message.author.tag}`);
-    resetSyncInterval(message.client);
-    await runRolesync(message.client, message.author.id);
-    return;
-  }
 
   const command = message.client.prefixCommands.get(commandName);
   if (!command) return;
